@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Ambientes
+.venv/
+venv/
+env/
+
+# Dados brutos e artefatos gerados
+data/raw/
+data/*.db
+data/*.db.wal
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Testes
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE / SO
+.idea/
+.vscode/
+.DS_Store
