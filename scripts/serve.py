@@ -43,12 +43,14 @@ def run_pipeline() -> None:
         latest = None
 
     if latest is None:
-        log.info("Banco vazio: backfill completo (anos padrão).")
-        _run("ingest")
+        log.info("Banco vazio: backfill completo (parse progressivo por ano).")
+        for year in config.DEFAULT_YEARS:
+            _run("ingest", "--year", year)
+            _run("parse")
     else:
         log.info("Ingestão incremental desde %s.", latest)
         _run("ingest", "--since", latest.isoformat())
-    _run("parse")
+        _run("parse")
 
 
 def _pipeline_loop(interval_seconds: float) -> None:

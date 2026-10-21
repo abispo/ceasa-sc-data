@@ -14,19 +14,28 @@ def _iter_pdfs() -> list[Path]:
     return sorted(config.RAW_DIR.rglob("*.pdf"))
 
 
-def build() -> int:
+def _loaded_arquivos(conn) -> set[str]:
+    rows = conn.execute(text("SELECT DISTINCT arquivo FROM bronze.cotacoes_raw")).fetchall()
+    return {r[0] for r in rows}
+
+
+def build(full: bool = False) -> int:
     engine = db.connect()
     total = 0
     try:
         with engine.begin() as conn:
-            conn.execute(text("DELETE FROM bronze.cotacoes_raw"))
-            pdfs = _iter_pdfs()
-            for path in track(pdfs, description="Parse + carga"):
+            if full:
+                conn.execute(text("DELETE FROM bronze.cotacoes_raw"))
+            loaded = _loaded_arquivos(conn)
+            for path in track(_iter_pdfs(), description="Parse + carga"):
+                if str(path) in loaded:
+                    continue
                 metadata = parser.extract_metadata(path)
                 parsed = parser.parse_pdf(path)
                 rows = [{**metadata, **r, "arquivo": str(path)} for r in parsed]
                 db.insert_bronze(conn, rows)
                 total += len(rows)
+                loaded.add(str(path))
 
             db.build_silver(conn)
             db.build_gold(conn)

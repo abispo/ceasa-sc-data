@@ -2,10 +2,13 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 from sqlalchemy import create_engine, text
+from streamlit_autorefresh import st_autorefresh
 
 from ceasa_sc_data import config
 
 st.set_page_config(page_title="CEASA/SC — Cotações", layout="wide")
+
+st_autorefresh(interval=30_000, key="ceasa_refresh")
 
 
 @st.cache_resource
@@ -23,8 +26,15 @@ st.title("Cotações de Preços — CEASA/SC")
 try:
     unidades = _query("SELECT DISTINCT unidade FROM silver.cotacoes ORDER BY 1")
     produtos = _query("SELECT DISTINCT produto FROM silver.cotacoes ORDER BY 1")
+    carregado = not unidades.empty and not produtos.empty
 except Exception:
-    st.warning("Banco ainda não construído. Rode `ceasa-sc-data parse` primeiro.")
+    carregado = False
+
+if not carregado:
+    st.warning(
+        "Banco ainda em construção (backfill em andamento). "
+        "Esta página atualiza sozinha a cada 30 s."
+    )
     st.stop()
 
 col1, col2 = st.columns(2)

@@ -71,7 +71,12 @@ uv run ceasa-sc-data parse
 
 Lê todos os PDFs de `data/raw/pdfs/`, extrai as tabelas e carrega no PostgreSQL
 (apontado por `DATABASE_URL`) nas camadas bronze → silver → gold. O comando é
-idempotente.
+**incremental** (só processa PDFs ainda não carregados) e idempotente. Para
+re-processar tudo do zero:
+
+```bash
+uv run ceasa-sc-data parse --full
+```
 
 ### 3.3 Dashboard (`dashboard`)
 

@@ -26,9 +26,13 @@ def ingest(
 
 
 @app.command()
-def parse() -> None:
+def parse(
+    full: bool = typer.Option(
+        False, "--full", help="Re-constrói o bronze do zero (re-parseia todos os PDFs)."
+    ),
+) -> None:
     """Extrai os dados dos PDFs e carrega no PostgreSQL (bronze -> silver -> gold)."""
-    n = build.build()
+    n = build.build(full=full)
     typer.echo(f"{n} linhas processadas.")
 
 

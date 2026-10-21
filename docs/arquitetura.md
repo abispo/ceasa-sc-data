@@ -133,8 +133,9 @@ coluna `Comum/Kg` usa ponto (`15.00`). O parser converte ambos para `float`.
 | gold    | `gold.preco_medio_mensal` | Preço médio mensal por produto/unidade |
 | gold    | `gold.preco_por_produto` | Série completa por produto |
 
-**Idempotência**: `parse` apaga e reconstrói `bronze` do zero; `silver` usa
-`INSERT OR REPLACE` com chave natural
+**Idempotência**: `parse` é incremental — só processa PDFs cujo `arquivo` ainda
+não está em `bronze` (use `--full` para reconstruir o bronze do zero). `silver`
+usa `INSERT ... ON CONFLICT DO UPDATE` com a chave natural
 `(data, unidade, produto, variedade, classificacao, tipo, origem, embalagem)`,
 portanto re-rodar não duplica registros.
 
@@ -153,6 +154,5 @@ permite filtrar por unidade e produto e exibe KPIs e a série temporal de preço
   layout dos PDFs de Blumenau e Tubarão.
 - **Orquestração**: hoje o pipeline é disparado via CLI. Se for necessário
   agendar, o próximo passo natural é Dagster/Prefect ou um cron simples.
-- **Idempotência do bronze**: `bronze` é reconstruído a cada `parse`; para
-  processamento incremental em larga escala, valeria rastrear arquivos já
-  carregados.
+- **Idempotência do bronze**: o parse rastreia arquivos já carregados pelo campo
+  `arquivo`; para reconstruir do zero, rode `parse --full`.
