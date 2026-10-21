@@ -25,6 +25,20 @@ uv run ceasa-sc-data dashboard       # abre o Streamlit
 - **[Guia de uso](docs/guia-de-uso.md)** — passo a passo completo, exemplos de
   comandos e solução de problemas.
 
+## Deploy no Render
+
+O repositório traz um [Blueprint](render.yaml) + `Dockerfile` para publicar no
+[Render](https://render.com). No plano **Free**:
+
+- O serviço sobe o dashboard Streamlit e, na inicialização, roda o pipeline
+  (`ingest` + `parse`) para construir o DuckDB.
+- Um scheduler interno re-roda o pipeline a cada `PIPELINE_INTERVAL_HOURS`
+  (padrão 24 h) enquanto a instância estiver acordada.
+- Como o disco é **efêmero** no Free, os dados são reconstruídos a cada
+  deploy/restart/spin-down (a re-download é incremental via manifest).
+
+Para publicar: no Render, **New → Blueprint** e aponte para este repositório.
+
 ## Stack
 
 DuckDB + Python + Streamlit, seguindo a arquitetura Medallion (bronze → silver →

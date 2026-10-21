@@ -32,13 +32,24 @@ def parse() -> None:
 @app.command()
 def dashboard() -> None:
     """Sobe o dashboard Streamlit."""
-    import streamlit.web.cli as stcli
+    import os
     import sys
+
+    import streamlit.web.cli as stcli
 
     from ceasa_sc_data import config
 
     app_path = config.PROJECT_ROOT / "src" / "ceasa_sc_data" / "dashboard" / "app.py"
-    sys.argv = ["streamlit", "run", str(app_path)]
+    port = os.environ.get("PORT", "8501")
+    sys.argv = [
+        "streamlit",
+        "run",
+        str(app_path),
+        "--server.headless=true",
+        "--server.address=0.0.0.0",
+        "--server.port",
+        port,
+    ]
     stcli.main()
 
 
