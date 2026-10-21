@@ -16,15 +16,18 @@ def ingest(
     all_years: bool = typer.Option(
         False, "--all", help="Baixa todas as pastas encontradas, incluindo 'Anos Anteriores'."
     ),
+    since: str | None = typer.Option(
+        None, "--since", help="Baixa apenas PDFs a partir desta data (AAAA-MM-DD)."
+    ),
 ) -> None:
     """Baixa os PDFs de cotação do portal CEASA/SC."""
-    n = downloader.download(years, force=force, all_years=all_years)
+    n = downloader.download(years, force=force, all_years=all_years, since=since)
     typer.echo(f"{n} PDFs baixados.")
 
 
 @app.command()
 def parse() -> None:
-    """Extrai os dados dos PDFs e carrega no DuckDB (bronze -> silver -> gold)."""
+    """Extrai os dados dos PDFs e carrega no PostgreSQL (bronze -> silver -> gold)."""
     n = build.build()
     typer.echo(f"{n} linhas processadas.")
 

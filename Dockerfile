@@ -21,4 +21,4 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 EXPOSE 8501
 
-CMD ["uv", "run", "python", "scripts/serve.py"]
+CMD ["python", "scripts/serve.py"]

@@ -13,10 +13,14 @@ gerado por JasperReports (texto, não imagem), com colunas fixas.
 
 ```bash
 uv sync
+export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ceasa
 uv run ceasa-sc-data ingest          # baixa os PDFs (padrão 2020..2026)
-uv run ceasa-sc-data parse           # extrai e carrega no DuckDB
+uv run ceasa-sc-data parse           # extrai e carrega no PostgreSQL
 uv run ceasa-sc-data dashboard       # abre o Streamlit
 ```
+
+`parse` e `dashboard` precisam de um PostgreSQL acessível via `DATABASE_URL`
+(no Render ele é injetado automaticamente pelo Blueprint).
 
 ## Documentação
 
@@ -30,16 +34,20 @@ uv run ceasa-sc-data dashboard       # abre o Streamlit
 O repositório traz um [Blueprint](render.yaml) + `Dockerfile` para publicar no
 [Render](https://render.com). No plano **Free**:
 
-- O serviço sobe o dashboard Streamlit e, na inicialização, roda o pipeline
-  (`ingest` + `parse`) para construir o DuckDB.
+- O dashboard Streamlit sobe **imediatamente**; o pipeline (`ingest` + `parse`)
+  roda em **segundo plano** e usa ingestão incremental: baixa apenas PDFs a
+  partir da última data já presente no PostgreSQL (watermark). Se o banco
+  estiver vazio, faz o backfill completo (anos padrão).
 - Um scheduler interno re-roda o pipeline a cada `PIPELINE_INTERVAL_HOURS`
   (padrão 24 h) enquanto a instância estiver acordada.
-- Como o disco é **efêmero** no Free, os dados são reconstruídos a cada
-  deploy/restart/spin-down (a re-download é incremental via manifest).
+- Os dados persistem no **PostgreSQL** (definido no Blueprint), independente do
+  disco efêmero do serviço.
+- Atenção: o Postgres **Free** do Render expira em **30 dias** (exige upgrade
+  para um plano pago após esse prazo).
 
 Para publicar: no Render, **New → Blueprint** e aponte para este repositório.
 
 ## Stack
 
-DuckDB + Python + Streamlit, seguindo a arquitetura Medallion (bronze → silver →
-gold). Detalhes e justificativas em [docs/arquitetura.md](docs/arquitetura.md).
+PostgreSQL + Python + Streamlit, seguindo a arquitetura Medallion (bronze →
+silver → gold). Detalhes e justificativas em [docs/arquitetura.md](docs/arquitetura.md).

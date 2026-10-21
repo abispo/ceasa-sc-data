@@ -1,7 +1,7 @@
-import duckdb
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from sqlalchemy import create_engine, text
 
 from ceasa_sc_data import config
 
@@ -9,12 +9,13 @@ st.set_page_config(page_title="CEASA/SC — Cotações", layout="wide")
 
 
 @st.cache_resource
-def _conn():
-    return duckdb.connect(str(config.DB_PATH), read_only=True)
+def _engine():
+    return create_engine(config.DATABASE_URL)
 
 
-def _query(sql: str, params=None) -> pd.DataFrame:
-    return _conn().execute(sql, params or []).fetchdf()
+def _query(sql: str, params: dict | None = None) -> pd.DataFrame:
+    with _engine().connect() as conn:
+        return pd.read_sql_query(text(sql), conn, params=params or {})
 
 
 st.title("Cotações de Preços — CEASA/SC")
@@ -35,10 +36,10 @@ df = _query(
     SELECT data, produto, variedade, classificacao, tipo, origem,
            embalagem, peso_kg, preco_min, preco_comum, preco_max, preco_comum_kg
     FROM silver.cotacoes
-    WHERE unidade = ? AND produto = ?
+    WHERE unidade = :unidade AND produto = :produto
     ORDER BY data
     """,
-    [unidade, produto],
+    {"unidade": unidade, "produto": produto},
 )
 
 if df.empty:

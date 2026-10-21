@@ -1,5 +1,6 @@
 import csv
 import time
+from datetime import date, datetime
 from pathlib import Path
 
 import requests
@@ -7,6 +8,24 @@ from rich.progress import track
 
 from ceasa_sc_data import config
 from ceasa_sc_data.ingest import crawler
+
+
+def _parse_date(value: str | None) -> date | None:
+    if not value:
+        return None
+    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(value.strip(), fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _year_number(label: str) -> int | None:
+    try:
+        return int(label.strip())
+    except ValueError:
+        return None
 
 
 def _load_manifest() -> dict[str, dict]:
@@ -71,15 +90,19 @@ def _download_doc(doc: dict, folder: list[str], manifest: dict[str, dict], force
         return False
 
 
-def _walk(url: str, folder: list[str], manifest: dict[str, dict], force: bool) -> int:
+def _walk(url: str, folder: list[str], manifest: dict[str, dict], force: bool, since: date | None) -> int:
     downloaded = 0
     for doc in track(
         crawler.list_documents(url),
         description="  ".join(folder) or "raiz",
     ):
+        if since is not None:
+            doc_date = _parse_date(doc["date"])
+            if doc_date is not None and doc_date < since:
+                continue
         downloaded += _download_doc(doc, folder, manifest, force)
     for label, cat_url in crawler.list_categories(url):
-        downloaded += _walk(cat_url, folder + [label], manifest, force)
+        downloaded += _walk(cat_url, folder + [label], manifest, force, since)
     return downloaded
 
 
@@ -87,20 +110,26 @@ def download(
     years: list[str] | None = None,
     force: bool = False,
     all_years: bool = False,
+    since: str | None = None,
 ) -> int:
     config.RAW_DIR.mkdir(parents=True, exist_ok=True)
     manifest = _load_manifest()
     root = config.BASE_URL + config.COTACOES_PATH
+    since_date = _parse_date(since)
 
     if all_years:
-        downloaded = _walk(root, [], manifest, force)
+        downloaded = _walk(root, [], manifest, force, since_date)
     else:
-        selected = years or list(config.DEFAULT_YEARS)
+        selected = set(years) if years else set(config.DEFAULT_YEARS)
         downloaded = 0
         for year_label, year_url in crawler.discover_years():
-            if year_label not in selected:
+            if since_date is not None:
+                year_num = _year_number(year_label)
+                if year_num is None or year_num < since_date.year:
+                    continue
+            elif year_label not in selected:
                 continue
-            downloaded += _walk(year_url, [year_label], manifest, force)
+            downloaded += _walk(year_url, [year_label], manifest, force, since_date)
 
     _save_manifest(manifest)
     return downloaded

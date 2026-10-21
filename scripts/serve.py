@@ -5,7 +5,11 @@ import sys
 import threading
 import time
 
+from sqlalchemy import text
+
+from ceasa_sc_data import config
 from ceasa_sc_data.main import dashboard
+from ceasa_sc_data.store import db
 
 logging.basicConfig(
     level=logging.INFO,
@@ -14,7 +18,7 @@ logging.basicConfig(
 log = logging.getLogger("ceasa.deploy")
 
 
-def _run_pipeline_stage(*args: str) -> None:
+def _run(*args: str) -> None:
     cmd = [sys.executable, "-m", "ceasa_sc_data.main", *args]
     log.info("Rodando: %s", " ".join(cmd))
     result = subprocess.run(cmd)
@@ -22,24 +26,41 @@ def _run_pipeline_stage(*args: str) -> None:
         log.warning("Etapa falhou (exit %s): %s", result.returncode, " ".join(cmd))
 
 
+def _latest_data():
+    engine = db.connect()
+    try:
+        with engine.connect() as conn:
+            return conn.execute(text("SELECT max(data) FROM silver.cotacoes")).scalar()
+    finally:
+        engine.dispose()
+
+
 def run_pipeline() -> None:
-    _run_pipeline_stage("ingest")
-    _run_pipeline_stage("parse")
+    try:
+        latest = _latest_data()
+    except Exception as exc:
+        log.warning("Falha ao ler watermark (%s); tentando backfill completo.", exc)
+        latest = None
+
+    if latest is None:
+        log.info("Banco vazio: backfill completo (anos padrão).")
+        _run("ingest")
+    else:
+        log.info("Ingestão incremental desde %s.", latest)
+        _run("ingest", "--since", latest.isoformat())
+    _run("parse")
 
 
-def _scheduler(interval_seconds: float) -> None:
+def _pipeline_loop(interval_seconds: float) -> None:
     while True:
-        time.sleep(interval_seconds)
         run_pipeline()
+        time.sleep(interval_seconds)
 
 
 def main() -> None:
     interval_hours = float(os.environ.get("PIPELINE_INTERVAL_HOURS", "24"))
-    log.info("Build inicial do pipeline (ingest + parse)...")
-    run_pipeline()
-    log.info("Agendando refresh a cada %.1f h", interval_hours)
-    threading.Thread(target=_scheduler, args=(interval_hours * 3600,), daemon=True).start()
-    log.info("Subindo dashboard...")
+    log.info("Subindo dashboard; pipeline em background a cada %.1f h.", interval_hours)
+    threading.Thread(target=_pipeline_loop, args=(interval_hours * 3600,), daemon=True).start()
     dashboard()
 
 

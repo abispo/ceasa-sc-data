@@ -17,7 +17,7 @@ data/raw/pdfs/{ano}/{mês}/{data}.pdf        ← landing zone
         │
         │  parse — pdfplumber (mapeamento de colunas por coordenada x)
         ▼
-DuckDB (data/ceasa.db)
+PostgreSQL (Render)
         │
         ├─ bronze.cotacoes_raw              ← linhas brutas por arquivo
         ├─ silver.cotacoes / dim_*          ← limpo, tipado, deduplicado
@@ -35,14 +35,15 @@ Streamlit (dashboard)
 | Gerenciador  | `uv`           | Rápido, lockfile determinístico (`uv.lock`) |
 | Scraping     | `requests` + `beautifulsoup4` | Simples e suficiente; o portal é HTML estático (sem JS) |
 | Parsing PDF  | `pdfplumber`   | PDFs são textuais (JasperReports/iText), com colunas em posições fixas |
-| Banco        | `duckdb`       | Analítico single-file, SQL nativo, zero servidor; volume é pequeno (~250 PDFs/ano) |
+| Banco        | `postgresql`   | Servidor relacional gerenciado no Render; persiste os dados entre deploys |
 | CLI          | `typer` + `rich` | Interface amigável, progresso visual |
 | Dashboard    | `streamlit` + `plotly` | Prototipagem rápida, Python puro |
 
 ### Por que não usar outra stack?
 
-- **PostgreSQL + dbt**: adicionaria um servidor e orquestração sem necessidade
-  para esse volume. DuckDB resolve tudo localmente.
+- **DuckDB (local)**: ótimo para exploração single-file, mas sem modo servidor e
+  single-writer — não atende persistência compartilhada num deploy web. Por isso
+  o projeto usa PostgreSQL.
 - **Spark/Databricks**: superdimensionado — os dados cabem em memória.
 - **OCR** (para os PDFs): desnecessário — os PDFs têm texto extraível.
 
@@ -59,8 +60,7 @@ ceasa-sc-data/
 │   └── guia-de-uso.md        # manual de uso
 ├── data/                     # gerado em runtime (gitignored)
 │   ├── raw/pdfs/             # landing zone
-│   ├── raw/manifest.csv      # controle de download incremental
-│   └── ceasa.db              # banco DuckDB
+│   └── raw/manifest.csv      # controle de download incremental
 └── src/ceasa_sc_data/
     ├── __init__.py
     ├── config.py             # constantes (URLs, caminhos, anos padrão)
@@ -140,8 +140,8 @@ portanto re-rodar não duplica registros.
 
 ### 4.4 Dashboard
 
-O app Streamlit (`dashboard/app.py`) abre o DuckDB em modo `read_only`, permite
-filtrar por unidade e produto e exibe KPIs e a série temporal de preço.
+O app Streamlit (`dashboard/app.py`) consulta o PostgreSQL (via SQLAlchemy),
+permite filtrar por unidade e produto e exibe KPIs e a série temporal de preço.
 
 ## 5. Limitações e roadmap
 

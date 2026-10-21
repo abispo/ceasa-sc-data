@@ -6,6 +6,7 @@ Passo a passo para rodar o pipeline, do zero até o dashboard.
 
 - Python 3.12+
 - [`uv`](https://docs.astral.sh/uv/) (instalador e gerenciador de ambiente)
+- PostgreSQL acessível (defina `DATABASE_URL`)
 
 ## 2. Instalação
 
@@ -15,6 +16,19 @@ uv sync
 
 Isso cria o ambiente virtual e instala as dependências a partir do `uv.lock`.
 
+Para um PostgreSQL local (teste do `parse`/dashboard), use o `docker-compose.yml`:
+
+```bash
+docker compose up -d db
+```
+
+Ele expõe o banco em `localhost:5432` (user/pass `postgres`, db `ceasa`), que é
+o padrão de `DATABASE_URL`. Se o seu banco for outro, exporte a variável:
+
+```bash
+export DATABASE_URL=postgresql://usuario:senha@host:5432/ceasa
+```
+
 ## 3. Comandos
 
 A CLI tem três comandos:
@@ -22,7 +36,7 @@ A CLI tem três comandos:
 ```bash
 uv run ceasa-sc-data --help
 # ingest     Baixa os PDFs de cotação
-# parse      Extrai e carrega no DuckDB (bronze -> silver -> gold)
+# parse      Extrai e carrega no PostgreSQL (bronze -> silver -> gold)
 # dashboard  Sobe o dashboard Streamlit
 ```
 
@@ -40,6 +54,9 @@ uv run ceasa-sc-data ingest --all
 
 # re-baixar arquivos já presentes
 uv run ceasa-sc-data ingest --force
+
+# apenas PDFs a partir de uma data (ingestão incremental via watermark)
+uv run ceasa-sc-data ingest --since 2026-10-01
 ```
 
 O download é **incremental**: arquivos já baixados são pulados. O controle fica
@@ -52,8 +69,9 @@ em `data/raw/manifest.csv`. Os PDFs são salvos em
 uv run ceasa-sc-data parse
 ```
 
-Lê todos os PDFs de `data/raw/pdfs/`, extrai as tabelas e carrega no DuckDB
-(`data/ceasa.db`) nas camadas bronze → silver → gold. O comando é idempotente.
+Lê todos os PDFs de `data/raw/pdfs/`, extrai as tabelas e carrega no PostgreSQL
+(apontado por `DATABASE_URL`) nas camadas bronze → silver → gold. O comando é
+idempotente.
 
 ### 3.3 Dashboard (`dashboard`)
 
@@ -76,12 +94,21 @@ uv run ceasa-sc-data dashboard
 
 ## 5. Consultando o banco direto
 
-O banco fica em `data/ceasa.db` e pode ser aberto com DuckDB/CLI ou Python:
+O banco é o PostgreSQL apontado por `DATABASE_URL`. Com `psql`:
+
+```bash
+psql "$DATABASE_URL" -c "SELECT * FROM silver.cotacoes LIMIT 10"
+```
+
+Ou em Python:
 
 ```python
-import duckdb
-conn = duckdb.connect("data/ceasa.db", read_only=True)
-df = conn.execute("SELECT * FROM silver.cotacoes LIMIT 10").fetchdf()
+import os
+import pandas as pd
+from sqlalchemy import create_engine
+
+engine = create_engine(os.environ["DATABASE_URL"])
+df = pd.read_sql("SELECT * FROM silver.cotacoes LIMIT 10", engine)
 ```
 
 Tabelas disponíveis: `bronze.cotacoes_raw`, `silver.cotacoes`,
@@ -92,7 +119,7 @@ Tabelas disponíveis: `bronze.cotacoes_raw`, `silver.cotacoes`,
 
 | Sintoma | Causa provável | Solução |
 |---------|----------------|---------|
-| Dashboard mostra "Banco ainda não construído" | `parse` nunca rodou, ou `data/ceasa.db` não existe | Rode `uv run ceasa-sc-data parse` |
+| Dashboard mostra "Banco ainda não construído" | `parse` nunca rodou, ou `DATABASE_URL` inválido | Rode `uv run ceasa-sc-data parse` com o `DATABASE_URL` correto |
 | `ingest` não baixa nada | Arquivos já estão no manifest e no disco | Use `--force` para re-baixar |
 | Erro de rede ao baixar | Instabilidade do servidor | Rode novamente; o manifest registra o erro e re-tenta os pendentes |
 | Nenhum PDF encontrado para um ano | Ano não existe no portal ou rótulo divergente | Verifique com `--all`; o rótulo deve bater com o portal (ex.: "2026") |
