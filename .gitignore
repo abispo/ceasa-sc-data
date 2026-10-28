@@ -16,6 +16,9 @@ data/raw/
 data/*.db
 data/*.db.wal
 
+# Postgres local (diretório de dados)
+postgres/
+
 # Streamlit
 .streamlit/secrets.toml
 
