@@ -27,6 +27,14 @@ Pipeline de engenharia de dados e dashboards de cotações de preços da CEASA/S
   período) e gráfico de série temporal de preço.
 - CLI: `ceasa-sc-data dashboard`.
 
+### 5. Clima (`inmet/`)
+- Downloader baixa os históricos anuais do INMET e extrai apenas as estações de
+  SC (23 estações automáticas), com manifest incremental.
+- Parser lê os CSVs (Latin-1, `;`, vírgula decimal) e converte UTC → hora local.
+- Carga em bronze/silver/gold (`clima_raw`, `clima`, `dim_estacao`,
+  `clima_diario`).
+- CLI: `ceasa-sc-data clima ingest` e `ceasa-sc-data clima parse`.
+
 ## Validação
 - Parser extraiu 265 linhas corretas de um PDF real (31/01/2025, São José).
 - Pipeline roda de ponta a ponta (ingestão → extração → carga).

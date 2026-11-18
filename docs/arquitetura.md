@@ -68,11 +68,15 @@ ceasa-sc-data/
     ├── ingest/
     │   ├── crawler.py        # descoberta recursiva (categorias/documentos)
     │   └── downloader.py     # download + manifest
+    ├── inmet/
+    │   ├── downloader.py     # download dos ZIPs anuais do INMET + extração SC
+    │   └── parser.py         # parse dos CSVs de estação do INMET
     ├── parse/
     │   └── parser.py         # extração de tabelas por coordenada x
     ├── store/
     │   ├── db.py             # schema (bronze/silver/gold)
-    │   └── build.py          # orquestração parse → carga
+    │   ├── build.py          # orquestração parse → carga (cotações)
+    │   └── build_weather.py  # orquestração parse → carga (clima)
     └── dashboard/
         └── app.py            # app Streamlit
 ```
@@ -143,6 +147,34 @@ portanto re-rodar não duplica registros.
 
 O app Streamlit (`dashboard/app.py`) consulta o PostgreSQL (via SQLAlchemy),
 permite filtrar por unidade e produto e exibe KPIs e a série temporal de preço.
+
+### 4.5 Clima (INMET)
+
+Complementando as cotações, o projeto também consome dados meteorológicos do
+INMET para Santa Catarina:
+
+- **Origem**: portal INMET, históricos anuais de estações automáticas
+  (`https://portal.inmet.gov.br/uploads/dadoshistoricos/{ano}.zip`, 2000..2026)
+  e o catálogo de estações (`https://apitempo.inmet.gov.br/estacoes/T`).
+- **Ingestão** (`inmet/downloader.py`): baixa o ZIP por ano e extrai apenas os
+  CSVs das estações de SC (`INMET_S_SC_AXXX_....CSV`), com manifest incremental.
+- **Extração** (`inmet/parser.py`): cada CSV traz 8 linhas de metadados +
+  cabeçalho + linhas horárias separadas por `;` (vírgula decimal, encoding
+  Latin-1). O parser converte horários UTC → hora local (`America/Sao_Paulo`) e
+  normaliza números para `float` (vazio → `NULL`).
+
+Colunas por hora: precipitação (mm), pressão (mB), radiação (Kj/m²),
+temperaturas (°C, bulbo seco/orvalho/máx/mín), umidade (%) e vento (direção/
+rajada/velocidade).
+
+Armazenamento Medallion:
+
+| Camada  | Tabela/View | Conteúdo |
+|---------|-------------|----------|
+| bronze  | `bronze.clima_raw` | Linhas horárias brutas por arquivo |
+| silver  | `silver.clima` | Limpo, chave `(data_hora, estacao)`, deduplicado por upsert |
+| silver  | `silver.dim_estacao` | Estações (código, nome, lat/lon, altitude, fundação) |
+| gold    | `gold.clima_diario` | Agregado diário por estação (precip, temp mín/máx/média, umidade) |
 
 ## 5. Limitações e roadmap
 

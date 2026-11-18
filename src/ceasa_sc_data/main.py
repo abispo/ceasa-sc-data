@@ -1,7 +1,8 @@
 import typer
 
 from ceasa_sc_data.ingest import downloader
-from ceasa_sc_data.store import build
+from ceasa_sc_data.inmet import downloader as inmet_downloader
+from ceasa_sc_data.store import build, build_weather
 
 app = typer.Typer(
     name="ceasa-sc-data",
@@ -58,6 +59,31 @@ def dashboard() -> None:
         port,
     ]
     stcli.main()
+
+
+clima_app = typer.Typer(help="Dados meteorológicos do INMET (Santa Catarina).")
+app.add_typer(clima_app, name="clima")
+
+
+@clima_app.command()
+def ingest(
+    years: list[str] = typer.Option(None, "--year", "-y", help="Ano a baixar (pode repetir)."),
+    force: bool = typer.Option(False, "--force", "-f", help="Re-baixa arquivos já presentes."),
+) -> None:
+    """Baixa os históricos anuais de estações automáticas do INMET (SC)."""
+    n = inmet_downloader.download(years, force=force)
+    typer.echo(f"{n} arquivos de clima baixados.")
+
+
+@clima_app.command()
+def parse(
+    full: bool = typer.Option(
+        False, "--full", help="Re-constrói o bronze de clima do zero."
+    ),
+) -> None:
+    """Extrai os CSVs do INMET e carrega no PostgreSQL (bronze -> silver -> gold)."""
+    n = build_weather.build(full=full)
+    typer.echo(f"{n} linhas de clima processadas.")
 
 
 def main() -> None:

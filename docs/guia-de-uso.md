@@ -38,6 +38,7 @@ uv run ceasa-sc-data --help
 # ingest     Baixa os PDFs de cotação
 # parse      Extrai e carrega no PostgreSQL (bronze -> silver -> gold)
 # dashboard  Sobe o dashboard Streamlit
+# clima      Dados meteorológicos do INMET (Santa Catarina)
 ```
 
 ### 3.1 Baixar os dados (`ingest`)
@@ -87,6 +88,40 @@ uv run ceasa-sc-data dashboard
 Abre o Streamlit em `http://localhost:8501`. Use os filtros de *Unidade* e
 *Produto* para navegar; o gráfico mostra a série de preço comum ao longo do
 tempo.
+
+### 3.4 Dados meteorológicos do INMET (`clima`)
+
+Baixa os históricos anuais de estações automáticas do INMET (por padrão, apenas
+Santa Catarina) e carrega no PostgreSQL nas camadas bronze → silver → gold.
+
+```bash
+# anos padrão (2020..2026)
+uv run ceasa-sc-data clima ingest
+
+# um ano específico
+uv run ceasa-sc-data clima ingest --year 2026
+
+# re-baixar anos já presentes
+uv run ceasa-sc-data clima ingest --force
+```
+
+O download baixa um ZIP por ano (`~80–100 MB`) e extrai apenas os CSVs das
+estações de SC para `data/raw/inmet/{ano}/`. O controle incremental fica em
+`data/raw/inmet_manifest.csv`.
+
+```bash
+# carrega os CSVs no PostgreSQL (bronze -> silver -> gold)
+uv run ceasa-sc-data clima parse
+
+# reconstrói o bronze de clima do zero
+uv run ceasa-sc-data clima parse --full
+```
+
+Tabelas de clima: `bronze.clima_raw` (linhas horárias brutas por arquivo),
+`silver.clima` (limpo, chave `(data_hora, estacao)`), `silver.dim_estacao`
+(dimensão das estações) e a view `gold.clima_diario` (agregado diário por
+estação: precipitação, temperaturas e umidade). Os horários são convertidos de
+UTC para hora local (`America/Sao_Paulo`).
 
 ## 4. Fluxo completo de exemplo
 

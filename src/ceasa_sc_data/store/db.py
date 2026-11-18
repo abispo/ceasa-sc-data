@@ -57,6 +57,8 @@ def connect():
     with engine.begin() as conn:
         conn.execute(text(SCHEMA_BRONZE))
         conn.execute(text(SCHEMA_SILVER))
+        conn.execute(text(SCHEMA_CLIMA_BRONZE))
+        conn.execute(text(SCHEMA_CLIMA_SILVER))
     return engine
 
 
@@ -153,6 +155,136 @@ def build_gold(conn) -> None:
                 data, produto, unidade, variedade, classificacao, origem, embalagem,
                 peso_kg, preco_min, preco_comum, preco_max, preco_comum_kg
             FROM silver.cotacoes
+            """
+        )
+    )
+
+
+CLIMA_NUMERIC_COLUMNS = [
+    "precip_mm",
+    "pressao_mb",
+    "pressao_max_mb",
+    "pressao_min_mb",
+    "radiacao_kjm2",
+    "temp_c",
+    "temp_orvalho_c",
+    "temp_max_c",
+    "temp_min_c",
+    "temp_orvalho_max_c",
+    "temp_orvalho_min_c",
+    "umidade_max_pct",
+    "umidade_min_pct",
+    "umidade_pct",
+    "vento_direcao_graus",
+    "vento_rajada_ms",
+    "vento_velocidade_ms",
+]
+
+
+def _clima_col_defs() -> str:
+    return ",\n    ".join(f"{c} DOUBLE PRECISION" for c in CLIMA_NUMERIC_COLUMNS)
+
+
+SCHEMA_CLIMA_BRONZE = f"""
+CREATE SCHEMA IF NOT EXISTS bronze;
+CREATE TABLE IF NOT EXISTS bronze.clima_raw (
+    arquivo VARCHAR,
+    estacao VARCHAR,
+    data_hora TIMESTAMP,
+    {_clima_col_defs()}
+);
+"""
+
+SCHEMA_CLIMA_SILVER = f"""
+CREATE SCHEMA IF NOT EXISTS silver;
+CREATE TABLE IF NOT EXISTS silver.clima (
+    data_hora TIMESTAMP,
+    estacao VARCHAR,
+    {_clima_col_defs()},
+    PRIMARY KEY (data_hora, estacao)
+);
+CREATE TABLE IF NOT EXISTS silver.dim_estacao (
+    estacao VARCHAR PRIMARY KEY,
+    nome VARCHAR,
+    uf VARCHAR,
+    latitude DOUBLE PRECISION,
+    longitude DOUBLE PRECISION,
+    altitude DOUBLE PRECISION,
+    data_fundacao DATE
+);
+"""
+
+
+def insert_clima_bronze(conn, rows: list[dict]) -> None:
+    if not rows:
+        return
+    cols = ["arquivo", "estacao", "data_hora", *CLIMA_NUMERIC_COLUMNS]
+    sql = (
+        f"INSERT INTO bronze.clima_raw ({', '.join(cols)}) "
+        f"VALUES ({', '.join(':' + c for c in cols)})"
+    )
+    conn.execute(text(sql), rows)
+
+
+def upsert_estacao(conn, station: dict) -> None:
+    if not station.get("estacao"):
+        return
+    conn.execute(
+        text(
+            """
+            INSERT INTO silver.dim_estacao
+            (estacao, nome, uf, latitude, longitude, altitude, data_fundacao)
+            VALUES (:estacao, :nome, :uf, :latitude, :longitude, :altitude, :data_fundacao)
+            ON CONFLICT (estacao) DO UPDATE SET
+                nome = EXCLUDED.nome,
+                uf = EXCLUDED.uf,
+                latitude = EXCLUDED.latitude,
+                longitude = EXCLUDED.longitude,
+                altitude = EXCLUDED.altitude,
+                data_fundacao = EXCLUDED.data_fundacao
+            """
+        ),
+        station,
+    )
+
+
+def build_clima_silver(conn) -> None:
+    cols = ["data_hora", "estacao", *CLIMA_NUMERIC_COLUMNS]
+    col_list = ", ".join(cols)
+    updates = ", ".join(f"{c} = EXCLUDED.{c}" for c in CLIMA_NUMERIC_COLUMNS)
+    conn.execute(
+        text(
+            f"""
+            INSERT INTO silver.clima ({col_list})
+            SELECT DISTINCT ON (data_hora, estacao) {col_list}
+            FROM bronze.clima_raw
+            WHERE data_hora IS NOT NULL
+            ORDER BY data_hora, estacao
+            ON CONFLICT (data_hora, estacao)
+            DO UPDATE SET {updates}
+            """
+        )
+    )
+
+
+def build_clima_gold(conn) -> None:
+    conn.execute(text("CREATE SCHEMA IF NOT EXISTS gold"))
+    conn.execute(
+        text(
+            """
+            CREATE OR REPLACE VIEW gold.clima_diario AS
+            SELECT
+                e.estacao,
+                e.nome AS municipio,
+                date_trunc('day', c.data_hora)::date AS data,
+                sum(c.precip_mm) AS precip_mm,
+                min(c.temp_min_c) AS temp_min_c,
+                max(c.temp_max_c) AS temp_max_c,
+                avg(c.temp_c) AS temp_media_c,
+                avg(c.umidade_pct) AS umidade_media_pct
+            FROM silver.clima c
+            JOIN silver.dim_estacao e ON e.estacao = c.estacao
+            GROUP BY 1, 2, 3
             """
         )
     )
