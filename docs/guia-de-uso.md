@@ -87,7 +87,9 @@ uv run ceasa-sc-data dashboard
 
 Abre o Streamlit em `http://localhost:8501`. Use os filtros de *Unidade* e
 *Produto* para navegar; o gráfico mostra a série de preço comum ao longo do
-tempo.
+tempo. No fim da página, a seção **Clima — INMET** mostra KPIs e gráficos de
+temperatura, precipitação e umidade por município (exige ter rodado
+`clima ingest` + `clima parse`).
 
 ### 3.4 Dados meteorológicos do INMET (`clima`)
 

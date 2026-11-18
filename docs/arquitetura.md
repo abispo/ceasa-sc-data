@@ -147,6 +147,8 @@ portanto re-rodar não duplica registros.
 
 O app Streamlit (`dashboard/app.py`) consulta o PostgreSQL (via SQLAlchemy),
 permite filtrar por unidade e produto e exibe KPIs e a série temporal de preço.
+No fim da página há uma seção **Clima — INMET** que lê `gold.clima_diario` e
+exibe KPIs e gráficos de temperatura, precipitação e umidade por município.
 
 ### 4.5 Clima (INMET)
 
